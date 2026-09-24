@@ -36,8 +36,8 @@ func main() {
 		})
 		key := uuid.NewString() // この決済を識別する一意なキー。
 
-		err := requestPaymentWithRetry(client, *base+"/payments", body,
-			key, *useKey)
+		err := requestPaymentWithRetry(client, *base+"/payments", rideID,
+			body, key, *useKey)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "%s: give up: %v\n", rideID, err)
 		}
@@ -69,8 +69,8 @@ const (
 	maxBackoff  = 2 * time.Second
 )
 
-func requestPaymentWithRetry(client *http.Client, url string, body []byte,
-	key string, useKey bool) error {
+func requestPaymentWithRetry(client *http.Client, url, rideID string,
+	body []byte, key string, useKey bool) error {
 
 	backoff := baseBackoff
 	var lastErr error
@@ -90,7 +90,7 @@ func requestPaymentWithRetry(client *http.Client, url string, body []byte,
 		if err != nil {
 			// 決済が確定済みか不明なままリトライする(at-least-once)。
 			lastErr = err
-			fmt.Printf("attempt %d failed: %v -> retry\n", i+1, err)
+			fmt.Printf("%s attempt %d failed: %v -> retry\n", rideID, i+1, err)
 			continue
 		}
 		respBody, _ := io.ReadAll(resp.Body)
@@ -101,13 +101,13 @@ func requestPaymentWithRetry(client *http.Client, url string, body []byte,
 			if resp.Header.Get("Idempotency-Replayed") == "true" {
 				replayed = " (replayed)"
 			}
-			fmt.Printf("attempt %d ok: %s%s\n",
-				i+1, bytes.TrimSpace(respBody), replayed)
+			fmt.Printf("%s attempt %d ok: %s%s\n",
+				rideID, i+1, bytes.TrimSpace(respBody), replayed)
 			return nil
 		}
 		lastErr = fmt.Errorf("status %d: %s", resp.StatusCode, respBody)
 		if resp.StatusCode >= 500 {
-			fmt.Printf("attempt %d failed: %v -> retry\n", i+1, lastErr)
+			fmt.Printf("%s attempt %d failed: %v -> retry\n", rideID, i+1, lastErr)
 			continue
 		}
 		return lastErr // 4xxはリトライしない。
